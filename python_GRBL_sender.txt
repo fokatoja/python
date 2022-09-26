@@ -1,0 +1,719 @@
+
+import serial
+import time
+filename = []
+filename_list = []
+
+
+all_letters_space = 0               #amount of space used by all letters written by the time of checking
+letter_iterator = 0                 #letter iterator, mainly to determine if any letter was written
+scale = 1                           #scale of font
+state = 1                           #state - if active (1), continues to ask user what to do 
+x_limit_int = 210                   #x dimension of plane that is typed by user, later recalculated to adapt
+x_limit = str(x_limit_int/4)
+y_limit_int = 297                   #y dimension of plane that is typed by user, later recalculated to adapt
+y_limit = str(y_limit_int/4)
+height_int = 5                      #height of a single letter
+height = str(height_int)                                    
+height_next_int = 1.5*height_int    #height of a single letter with added space between lines
+height_next = str(height_next_int)
+
+width_int = 2.5                     #width of a single letter
+width = str(width_int)
+width_pol_int = width_int*0.3       #width of a comma
+width_pol = str(width_pol_int)
+single_letter_space = width_int+1   #space that is used by one letter
+
+
+try:
+# Open grbl serial port
+    s = serial.Serial('COM11',115200)
+    print('Succesfully connected.')
+    
+except:
+    print('Problems with connection to the port.')
+    
+# User interface
+while state==1:
+    print("Type a letter accordingly to your intention:")
+    print("--------------------------------------------")
+    print("Set a scale of numbers  -> S")
+    print("--------------------------------------------")
+    print("Homing                  -> H")
+    print("--------------------------------------------")
+    print("Type your text          -> T")
+    print("--------------------------------------------")
+    print("Change the size of paper-> P")
+    print("--------------------------------------------")
+    print("Move X direction 10mm   -> X")
+    print("--------------------------------------------")
+    print("Move Y direction 10mm   -> Y")
+    print("--------------------------------------------")
+    print("Pen up                  -> U")
+    print("--------------------------------------------")
+    print("Pen down                -> D")
+    print("--------------------------------------------")
+    print("Send your own gcode     -> G")
+    print("--------------------------------------------")
+    print("Go to next line         -> L")
+    print("--------------------------------------------")
+    print("Exit                    -> C")
+
+    intention = input("Type a letter: ") #User input determining action
+
+    if intention == 'G':
+        print("SENDING YOUR GCODE.")
+        print("WARNING: CHECK YOUR GCODE FOR ANY ACTIONS THAT ARE NOT IN WORK PLANE.")
+        print("WARNING: FILE MUST BE IN THE SAME LOCATIONS AS THIS PROGRAM. IF NOT, INCLUDE PATH IN FILENAME!")
+                 
+        try:
+            filename = input( 'ENTER THE FILENAME (with .gcode)') #user input filename
+            f = open(filename,'r'); # opening the file
+            a = "\r\n\r\n"
+            print(a)
+            s.write(str.encode(a))
+            time.sleep(2)   # Wait for grbl to initialize 
+            s.flushInput()  # Flush startup text in serial input
+            s.write(str.encode('$H') + str.encode('\n')) # Send g-code block to grbl
+            grbl_out = s.readline() # Wait for grbl response with carriage return
+            print ( grbl_out.strip())
+            s.write(str.encode('G10 P0 L20 X')+str.encode(x_limit)+str.encode(' Y0 Z0') + str.encode('\n')) #setting homed location as right lower corner 
+            grbl_out = s.readline()
+            print ( grbl_out.strip())
+        
+            for line in f:
+                        l = line.strip() # Strip allEOL characters for consistency
+                        print ('Sending: ' + l),
+                        s.write(str.encode(l) + str.encode('\n')) # Send g-code block to grbl
+                        grbl_out = s.readline() # Wait for grbl response with carriage return
+                        print ( grbl_out.strip())
+        except Exception as e:
+            print('Error. Try again. ['+str(e)+']')
+            pass
+        
+    if intention == 'S':
+        print("SETTING THE SCALE")
+        try:
+            scale = input("Scale number: (1-5)") #user input scale
+            height_int = int(scale)*height_int
+            height = str(height_int)
+            width_int = int(scale)*width_int
+            width = str(width_int)
+            single_letter_space = width_int+1
+            width_pol_int = width_int*0.5
+            width_pol = str(width_pol_int)
+            height_next_int = 1.5*height_int
+            height_next = str(height_next_int)
+        except Exception as e:
+            print('Error. Try again. ['+str(e)+']')
+            pass
+
+    if intention == 'L':
+        try:
+            print("GOING TO NEXT LINE...")
+            s.write(str.encode('M3 S5') + str.encode('\n'))
+            grbl_out = s.readline() # Wait for grbl response with carriage return
+            print ( grbl_out.strip())
+            s.write(str.encode('G1 X')+str.encode(width)+str.encode('Y0')+ str.encode('\n'))
+            grbl_out = s.readline() # Wait for grbl response with carriage return
+            print ( grbl_out.strip())
+            s.write(str.encode('G10 P0 L20 X')+str.encode(str(all_letters_space)) +str.encode(' Y0')+str.encode(height_next) + str.encode('\n'))
+            grbl_out = s.readline() # Wait for grbl response with carriage return
+            print ( grbl_out.strip())
+            all_letters_space = 0
+        except Exception as e:
+            print('Error. Try again. ['+str(e)+']')
+            pass      
+        
+ 
+    if intention == 'H':
+        print("HOMING...")
+        try:
+            if letter_iterator == 0:
+                a = "\r\n\r\n"
+                s.write(str.encode(a))
+                time.sleep(2)   
+                s.flushInput()
+            s.write(str.encode('$H') + str.encode('\n'))
+            grbl_out = s.readline()
+            print ( grbl_out.strip())
+            s.write(str.encode('G10 P0 L20 X')+str.encode(x_limit)+str.encode(' Y0 Z0') + str.encode('\n'))
+            grbl_out = s.readline()
+            print ( grbl_out.strip())
+        except Exception as e:
+            print('Error. Try again. ['+str(e)+']')
+            pass
+        
+        
+    if intention == 'T':
+        print("TYPING YOUR TEXT")
+        try:
+            text_to_plot = input("Send your text: \n") #input user - text to write
+            splitted_text_to_plot = list(text_to_plot) #convert string to a list of letters or signs
+
+            #INIT PROCEDURE
+            if letter_iterator==0:
+              a = "\r\n\r\n"
+              s.write(str.encode(a))
+              time.sleep(2)   
+              s.flushInput()
+              print ("SETTING AXES POINTS - HOMING PROCEDURE...")
+              s.write(str.encode('M3 S5') + str.encode('\n')) #servo up
+              grbl_out = s.readline()
+              print ( grbl_out.strip())
+              s.write(str.encode('$H') + str.encode('\n'))  #homing action
+              grbl_out = s.readline()
+              print ( grbl_out.strip())
+              s.write(str.encode('G10 P0 L20 X')+str.encode(x_limit)+str.encode(' Y0 Z0') + str.encode('\n'))
+              grbl_out = s.readline()
+              print ( grbl_out.strip())
+              s.write(str.encode('G90')+str.encode('\n')) #determine positioning as absolute
+              grbl_out = s.readline()
+              print ( grbl_out.strip())
+              s.write(str.encode('G21')+str.encode('\n')) #all the values in mm or mm/min
+              grbl_out = s.readline()
+              print ( grbl_out.strip())
+              s.write(str.encode('G1 F12000')+str.encode('\n')) #setting feedrate
+              grbl_out = s.readline()
+              print ( grbl_out.strip())
+              s.write(str.encode('G1  X0 Y') +str.encode(y_limit) + str.encode('\n')) #going to first line
+              grbl_out = s.readline()
+              print ( grbl_out.strip())
+              s.write(str.encode('G10 P0 L20 X0 Y0 Z0') + str.encode('\n')) #set position as [0,0]
+              grbl_out = s.readline()
+              print ( grbl_out.strip())
+            else:
+              pass
+        except Exception as e:
+            print('Error. Try again. ['+str(e)+']')
+            pass
+
+        for number in splitted_text_to_plot: #for every element in a list of signs
+            try:      
+                kropka = number.find('.')
+                przecinek = number.find(',')
+                if str(przecinek) == '0': #set comma gcode
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y')+str.encode(width_pol) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+
+                elif kropka == 0: #set dot as comma gcode
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y')+str.encode(width_pol) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    
+                elif number.isspace()==True: #set gcode for whitespace
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y')+str.encode(width_pol) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    
+                elif number =='1': #set gcode for number 1 and on for other numbers
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+
+                elif number =='2':
+                    print('NUMBER 2')
+                    s.write(str.encode('G1 X0 Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+ str.encode(width)+str.encode(' Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width)+ str.encode(' Y')+str.encode(width) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y')+str.encode(width) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y0')+ str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width)+str.encode(' Y0')+ str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    
+                elif number =='3':
+                    s.write(str.encode('G1 X0 Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+ str.encode(width)+str.encode(' Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width)+ str.encode(' Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S5') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y')+str.encode(width) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) +str.encode(' Y')+str.encode(width) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+
+                elif number =='4':
+                    s.write(str.encode('G1 X0 Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0')+ str.encode(' Y')+str.encode(width) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width)+ str.encode(' Y')+str.encode(width) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width)+ str.encode(' Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y0')+ str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+
+                elif number =='5':
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+ str.encode(height)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+ str.encode(height)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y0')+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y0')+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    
+                elif number =='6':
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+ str.encode(height)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+ str.encode(height)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y0')+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y0')+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    
+                elif number =='7':
+                    s.write(str.encode('G1 X0')+str.encode(' Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode(' Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    
+                elif number =='8':
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+ str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+ str.encode(height)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+ str.encode(height)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y0')+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y0')+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    
+                elif number =='9':
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+ str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+ str.encode(height)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+ str.encode(height)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0') + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y')+str.encode(width)+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width) + str.encode(' Y0')+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y0')+str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    
+                elif number =='0':
+                    s.write(str.encode('G1 X0 Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('M3 S30') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000.000000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width)+ str.encode('Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X')+str.encode(width)+ str.encode('Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1  X0 Y')+str.encode(height) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                      
+                    
+                else:
+                    print("Wrong input:"+str(number))
+                    pass
+                
+                letter_iterator=letter_iterator+1 #incrementing letter iterator
+                all_letters_space = all_letters_space + single_letter_space #summing the space of letters
+                print(all_letters_space)
+                
+                s.write(str.encode('M5') + str.encode('\n'))
+                grbl_out = s.readline() # Wait for grbl response with carriage return
+                print ( grbl_out.strip())
+                
+                if all_letters_space < (x_limit_int/4)-2*width_int: #going to next 0,0 position of a number
+                    s.write(str.encode('G4 P1') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 F1000') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 X')+str.encode(str(single_letter_space))+ str.encode(' Y0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G10 P0 L20 X0 Y0 Z0') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+
+                
+                elif all_letters_space >= (x_limit_int/4)-2*width_int: #going to next line if the space that letters are using exceeds threshold
+                    s.write(str.encode('M3 S5') + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G1 X')+str.encode(width)+str.encode('Y0')+ str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    s.write(str.encode('G10 P0 L20 X')+str.encode(str(all_letters_space)) +str.encode(' Y0')+str.encode(height_next) + str.encode('\n'))
+                    grbl_out = s.readline() # Wait for grbl response with carriage return
+                    print ( grbl_out.strip())
+                    all_letters_space = 0
+               
+            except Exception as e:
+                    print('ERROR ['+str(e)+']')
+        
+        
+        
+    if intention == 'P':
+        try:
+            print("CHANGING SIZE OF PAPER [DEFAULT:A4]")
+            x_limit_int = int(input('SET X LIMITS:'))
+            x_limit = str(x_limit_int/4)
+            y_limit_int = int(input('SET Y LIMITS:'))
+            y_limit = str(y_limit_int/4)
+        except Exception as e:
+            print('ERROR ['+str(e)+']')
+        
+    if intention == 'X':
+        print("MOVING PEN IN X AXIS...")
+        try:
+            if letter_iterator == 0:
+                print('HOMING PROCEDURE PLEASE WAIT...')
+                a = "\r\n\r\n"
+                print(a)
+                s.write(str.encode(a))
+                time.sleep(2)   # Wait for grbl to initialize 
+                s.flushInput()  # Flush startup text in serial input
+                s.write(str.encode('$H') + str.encode('\n')) # Send g-code block to grbl
+                grbl_out = s.readline() # Wait for grbl response with carriage return
+                print ( grbl_out.strip())
+                s.write(str.encode('G10 P0 L20 X')+str.encode(x_limit)+str.encode(' Y0 Z0') + str.encode('\n')) #setting homed location as right lower corner 
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G90')+str.encode('\n')) #determine positioning as absolute
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G21')+str.encode('\n')) #all the values in mm or mm/min
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G1 F12000')+str.encode('\n')) #setting feedrate
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G1  X0 Y') +str.encode(y_limit) + str.encode('\n')) #going to first line
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G10 P0 L20 X0 Y0 Z0') + str.encode('\n')) #set position as [0,0]
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+            direction = input("1: X+ /0: X-") #user input direction
+            if direction == '1':
+                s.write(str.encode('G10 P0 L20 X0 Y0 Z0') + str.encode('\n'))
+                grbl_out = s.readline() # Wait for grbl response with carriage return
+                print ( grbl_out.strip())
+                s.write(str.encode('G1 X3 Y0') + str.encode('\n')) #moving 10mm
+                grbl_out = s.readline() 
+                print ( grbl_out.strip())
+                all_letters_space = all_letters_space + 3 #incrementing letters space
+                
+            if direction == '0':
+                s.write(str.encode('G10 P0 L20 X3 Y0 Z0') + str.encode('\n'))
+                grbl_out = s.readline() # Wait for grbl response with carriage return
+                print ( grbl_out.strip())
+                s.write(str.encode('G1 X0 Y0') + str.encode('\n')) #moving 10mm
+                grbl_out = s.readline() 
+                print ( grbl_out.strip())
+                all_letters_space = all_letters_space - 3 #decrementing letters space
+                
+        except Exception as e:
+                    print('ERROR ['+str(e)+']')
+                    
+    if intention == 'Y':
+        print("MOVING PEN IN Y AXIS...")
+        try:
+            if letter_iterator == 0:
+                print('HOMING PROCEDURE PLEASE WAIT...')
+                a = "\r\n\r\n"
+                print(a)
+                s.write(str.encode(a))
+                time.sleep(2)   # Wait for grbl to initialize 
+                s.flushInput()  # Flush startup text in serial input
+                s.write(str.encode('$H') + str.encode('\n')) # Send g-code block to grbl
+                grbl_out = s.readline() # Wait for grbl response with carriage return
+                print ( grbl_out.strip())
+                s.write(str.encode('G10 P0 L20 X')+str.encode(x_limit)+str.encode(' Y0 Z0') + str.encode('\n')) #setting homed location as right lower corner 
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G90')+str.encode('\n')) #determine positioning as absolute
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G21')+str.encode('\n')) #all the values in mm or mm/min
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G1 F12000')+str.encode('\n')) #setting feedrate
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G1  X0 Y') +str.encode(y_limit) + str.encode('\n')) #going to first line
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+                s.write(str.encode('G10 P0 L20 X0 Y0 Z0') + str.encode('\n')) #set position as [0,0]
+                grbl_out = s.readline()
+                print ( grbl_out.strip())
+            direction = input("1: Y+ /0: Y-") #user input direction and so on as in move in X axis
+            if direction == '1':
+                s.write(str.encode('G10 P0 L20 X0 Y0 Z0') + str.encode('\n'))
+                grbl_out = s.readline() # Wait for grbl response with carriage return
+                print ( grbl_out.strip())
+                s.write(str.encode('G1 X0 Y3') + str.encode('\n'))
+                grbl_out = s.readline() 
+                print ( grbl_out.strip())
+                
+            if direction == '0':
+                s.write(str.encode('G10 P0 L20 X0 Y3 Z0') + str.encode('\n'))
+                grbl_out = s.readline() # Wait for grbl response with carriage return
+                print ( grbl_out.strip())
+                s.write(str.encode('G1 X0 Y')+str.encode(height) + str.encode('\n'))
+                grbl_out = s.readline() 
+                print ( grbl_out.strip())
+                
+        except Exception as e:
+                    print('ERROR ['+str(e)+']')
+                    
+    if intention == 'U':
+        try:
+            print("PEN UP")
+            s.write(str.encode('M3 S5') + str.encode('\n')) #servo up
+            grbl_out = s.readline() 
+            print ( grbl_out.strip())
+        except Exception as e:
+                    print('ERROR ['+str(e)+']')
+        
+    if intention == 'D':
+        try:
+            print("PEN DOWN")
+            s.write(str.encode('M3 S30') + str.encode('\n')) #servo down
+            grbl_out = s.readline() 
+            print ( grbl_out.strip())
+        except Exception as e:
+                    print('ERROR ['+str(e)+']')
+                    
+    if intention == 'C':
+        print("CLOSING")
+        s.close()
+        state =0
+
+
+
+
+    
+
+
+    
+
+    
+
+
+
+
